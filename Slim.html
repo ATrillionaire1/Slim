@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview: Assistant Property Manager - 1010 Waugh</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #chat-container {
+            width: 100%;
+            max-width: 600px;
+            height: 90vh;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #chat-header {
+            background: #1a365d;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        #chat-header span {
+            display: block;
+            font-size: 0.75em;
+            font-weight: normal;
+            color: #a0aec0;
+            margin-top: 5px;
+        }
+        #chat-history {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            line-height: 1.4;
+        }
+        .ai-message {
+            background: #e2e8f0;
+            color: #1a202c;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .user-message {
+            background: #2b6cb0;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        #input-container {
+            padding: 15px;
+            background: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 20px;
+            outline: none;
+            font-size: 1em;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        #send-btn {
+            background: #2b6cb0;
+            color: white;
+        }
+        #send-btn:hover { background: #2c5282; }
+        #end-btn {
+            background: #e53e3e;
+            color: white;
+        }
+        #end-btn:hover { background: #c53030; }
+        .loading {
+            font-style: italic;
+            color: #718096;
+            align-self: flex-start;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-container">
+    <div id="chat-header">
+        Regional Property Manager
+        <span>1010 Waugh Apartments, Houston, TX</span>
+    </div>
+    <div id="chat-history"></div>
+    <div class="loading" id="typing-indicator">Regional Manager is typing...</div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Type your response..." onkeypress="handleKeyPress(event)">
+        <button id="send-btn" onclick="sendMessage()">Send</button>
+        <button id="end-btn" onclick="endInterview()">End & Assess</button>
+    </div>
+</div>
+
+<script>
+    // --- IMPORTANT: INSERT YOUR GEMINI API KEY HERE ---
+    const API_KEY = 'AQ.Ab8RN6IO9ooJD8i1lVofWohMY2VjGlbOKS_gRGfwtzfCCo2u2g'; 
+    // Get a free key at: https://aistudio.google.com/app/apikey
+
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    
+    let conversationHistory = [];
+
+    const systemPrompt = `You are the Regional Property Manager for 1010 Waugh Apartments in Houston, TX. You are interviewing a candidate for a non-exempt Assistant Property Manager position. 
+    Context: The candidate has already successfully passed the first-round interview with the on-site Property Manager. 
+    Rules: 
+    1. Start the interview by welcoming them, mentioning their success with the Property Manager, and engaging in brief professional small talk. 
+    2. Ask ONLY ONE question at a time and wait for the candidate's response. Do NOT provide a list of questions.
+    3. Be friendly but rigorous. Follow up on their answers, ask for elaborations, and test their knowledge on tenant relations, rent collection, leasing, and Fair Housing regulations in Texas.
+    4. Keep your responses conversational, professional, and concise.`;
+
+    // Initialize the conversation
+    window.onload = () => {
+        addMessage("Connecting to 1010 Waugh regional office...", 'ai-message');
+        fetchAIResponse([{ role: 'user', parts: [{ text: "Hello, I am ready to begin the interview." }] }], true);
+    };
+
+    function addMessage(text, className) {
+        const history = document.getElementById('chat-history');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${className}`;
+        msgDiv.innerText = text;
+        history.appendChild(msgDiv);
+        history.scrollTop = history.scrollHeight;
+    }
+
+    function handleKeyPress(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('user-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        addMessage(text, 'user-message');
+        input.value = '';
+        
+        conversationHistory.push({ role: 'user', parts: [{ text: text }] });
+        await fetchAIResponse(conversationHistory);
+    }
+
+    async function fetchAIResponse(history, isSystemInit = false) {
+        document.getElementById('typing-indicator').style.display = 'block';
+        
+        const payload = {
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: history
+        };
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            
+            const data = await response.json();
+            const aiText = data.candidates[0].content.parts[0].text;
+            
+            document.getElementById('typing-indicator').style.display = 'none';
+            addMessage(aiText, 'ai-message');
+            
+            if (!isSystemInit) {
+                conversationHistory.push({ role: 'model', parts: [{ text: aiText }] });
+            } else {
+                conversationHistory.push(
+                    { role: 'user', parts: [{ text: "Hello, I am ready to begin the interview." }] },
+                    { role: 'model', parts: [{ text: aiText }] }
+                );
+            }
+        } catch (error) {
+            console.error(error);
+            document.getElementById('typing-indicator').style.display = 'none';
+            addMessage("Connection error. Please check your API key and internet connection.", 'ai-message');
+        }
+    }
+
+    async function endInterview() {
+        const input = document.getElementById('user-input');
+        input.disabled = true;
+        document.getElementById('send-btn').disabled = true;
+        document.getElementById('end-btn').disabled = true;
+        
+        addMessage("Ending interview and generating assessment...", 'user-message');
+        
+        const assessmentPrompt = "The interview is now over. Break character. Based on the entire conversation history above, provide a detailed, comprehensive assessment of the candidate's performance. Evaluate their effectiveness, engagement, professional tone, and readiness for the Assistant Property Manager role at 1010 Waugh. Highlight strengths and suggest areas for improvement.";
+        
+        conversationHistory.push({ role: 'user', parts: [{ text: assessmentPrompt }] });
+        await fetchAIResponse(conversationHistory);
+    }
+</script>
+
+</body>
+</html>
