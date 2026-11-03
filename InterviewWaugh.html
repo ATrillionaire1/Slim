@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview - 1010 Waugh Apartments</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for chat window */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* Typing indicator animation */
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .markdown-body p { margin-bottom: 0.75em; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body strong { font-weight: 600; color: inherit; }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .markdown-body li { margin-bottom: 0.25em; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col font-sans">
+
+    <!-- Header -->
+    <header class="bg-slate-800 text-white p-4 shadow-md flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-slate-600 flex items-center justify-center text-lg font-bold">
+                RM
+            </div>
+            <div>
+                <h1 class="text-lg font-semibold leading-tight">Regional Property Manager</h1>
+                <p class="text-xs text-slate-300">1010 Waugh Apartments, Houston TX</p>
+            </div>
+        </div>
+        <button id="endBtn" class="bg-red-500 hover:bg-red-600 transition-colors text-white text-sm font-medium py-2 px-4 rounded-lg shadow-sm" onclick="endInterview()">
+            End Interview & Get Feedback
+        </button>
+    </header>
+
+    <!-- Chat Container -->
+    <main id="chatContainer" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 flex flex-col bg-[#f8fafc]">
+        <!-- Messages will be injected here dynamically -->
+    </main>
+
+    <!-- Input Area -->
+    <footer id="inputArea" class="bg-white border-t border-gray-200 p-4 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div class="max-w-4xl mx-auto flex gap-3 items-end">
+            <textarea id="userInput" 
+                class="flex-1 max-h-32 min-h-[44px] bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 resize-none outline-none transition-shadow" 
+                placeholder="Type your response here..." 
+                rows="1"
+                oninput="this.style.height = '';this.style.height = Math.min(this.scrollHeight, 128) + 'px'"></textarea>
+            <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm px-5 py-3 transition-colors h-[44px] flex items-center justify-center shrink-0" onclick="handleSend()">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Error/Notice Modal -->
+    <div id="noticeModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 transition-opacity opacity-0">
+        <div class="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 transform scale-95 transition-transform">
+            <h3 id="noticeTitle" class="text-lg font-bold text-gray-900 mb-2">Notice</h3>
+            <p id="noticeMessage" class="text-gray-600 text-sm mb-4">Something went wrong.</p>
+            <button onclick="closeNotice()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 rounded-lg">Dismiss</button>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = "Ab8RN6IO9ooJD8i1lVofWohMY2VjGlbOKS_gRGfwtzfCCo2u2g"; // Kept empty so Canvas environment provides it
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`;
+        
+        let chatHistory = [];
+        let isInterviewActive = true;
+        let isWaitingForResponse = false;
+
+        const systemPrompt = `You are the Regional Property Manager for 1010 Waugh Apartments in Houston, TX. You are currently conducting a second-round interview for a non-exempt Assistant Property Manager position. 
+
+Context:
+- The candidate has already successfully passed their first interview with the on-site Property Manager.
+- 1010 Waugh is a premium apartment community in Houston. 
+- The Assistant Property Manager handles tenant relations, rent collection, leasing, vendor coordination, and strict adherence to Fair Housing regulations.
+
+Rules for your behavior:
+1. Act as the interviewer. Maintain a professional, friendly, yet rigorous and thorough demeanor.
+2. CONVERSATION FLOW: You MUST ask ONLY ONE question at a time. Never list multiple questions in a single response.
+3. Wait for the candidate to answer before moving on.
+4. REACT & ELABORATE: Listen to the candidate's answers. Validate them, ask follow-up questions based on their specific phrasing, and probe deeper into their experience.
+5. Make light professional small talk where appropriate (e.g., Houston weather, traffic, acknowledging their success in round one).
+
+Special Directives:
+- If you receive a message starting with "[SYSTEM COMMAND: START]", begin the interview by welcoming them, acknowledging the successful first round with the Property Manager, and asking an initial icebreaker.
+- If you receive a message starting with "[SYSTEM COMMAND: ASSESS]", the interview is over. Drop the interviewer persona completely. Act as an objective evaluator and provide a highly detailed, comprehensive assessment of the candidate's performance. Evaluate their effectiveness, communication, engagement, and readiness for the role. Provide actionable feedback.`;
+
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const endBtn = document.getElementById('endBtn');
+
+        // Simple Markdown parser for bold and line breaks
+        function parseMarkdown(text) {
+            let html = text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n/g, '<br>');
+            
+            // Basic bullet point conversion
+            html = html.replace(/(?:^|<br>)\s*[-*]\s+(.*?)(?=(?:<br>\s*[-*]|$))/g, function(match, p1) {
+                return `<li>${p1}</li>`;
+            });
+            // Wrap contiguous LIs in UL
+            html = html.replace(/(<li>.*<\/li>)/g, '<ul class="list-disc pl-5 my-2">$1</ul>');
+            
+            return `<div class="markdown-body">${html}</div>`;
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTo({
+                top: chatContainer.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+
+        function showNotice(title, message) {
+            document.getElementById('noticeTitle').innerText = title;
+            document.getElementById('noticeMessage').innerText = message;
+            const modal = document.getElementById('noticeModal');
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modal.querySelector('div').classList.remove('scale-95');
+            }, 10);
+        }
+
+        function closeNotice() {
+            const modal = document.getElementById('noticeModal');
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }, 300);
+        }
+
+        function createMessageElement(text, isUser = false) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex w-full ${isUser ? 'justify-end' : 'justify-start'}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = `max-w-[85%] md:max-w-[75%] rounded-2xl p-4 shadow-sm text-sm md:text-base leading-relaxed ${
+                isUser 
+                ? 'bg-blue-600 text-white rounded-br-sm' 
+                : 'bg-white text-gray-800 border border-gray-100 rounded-bl-sm shadow-md'
+            }`;
+
+            bubble.innerHTML = isUser ? text : parseMarkdown(text);
+            wrapper.appendChild(bubble);
+            return wrapper;
+        }
+
+        function addMessageToUI(text, isUser) {
+            const msgEl = createMessageElement(text, isUser);
+            chatContainer.appendChild(msgEl);
+            scrollToBottom();
+        }
+
+        function showTypingIndicator() {
+            const wrapper = document.createElement('div');
+            wrapper.id = 'typingIndicator';
+            wrapper.className = `flex w-full justify-start`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = `bg-white border border-gray-100 rounded-2xl rounded-bl-sm p-4 shadow-md flex gap-1 items-center h-[52px]`;
+            
+            bubble.innerHTML = `
+                <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+            `;
+            
+            wrapper.appendChild(bubble);
+            chatContainer.appendChild(wrapper);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        function setInputState(disabled) {
+            userInput.disabled = disabled;
+            sendBtn.disabled = disabled;
+            if (disabled) {
+                userInput.classList.add('bg-gray-100', 'cursor-not-allowed');
+                sendBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                userInput.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                sendBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                userInput.focus();
+            }
+        }
+
+        async function fetchGeminiResponse(retryCount = 0) {
+            try {
+                const payload = {
+                    contents: chatHistory,
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    }
+                };
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    if (response.status === 429 && retryCount < 3) {
+                        // Exponential backoff
+                        const delay = Math.pow(2, retryCount) * 1000;
+                        await new Promise(r => setTimeout(r, delay));
+                        return fetchGeminiResponse(retryCount + 1);
+                    }
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const aiText = candidate.content.parts[0].text;
+                    
+                    // Add AI response to history
+                    chatHistory.push({
+                        role: "model",
+                        parts: [{ text: aiText }]
+                    });
+
+                    removeTypingIndicator();
+                    addMessageToUI(aiText, false);
+                    
+                    if (isInterviewActive) {
+                        isWaitingForResponse = false;
+                        setInputState(false);
+                    }
+                } else {
+                    throw new Error("Invalid response format from API.");
+                }
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                removeTypingIndicator();
+                showNotice("Connection Issue", "The interviewer is experiencing a poor connection. Please try sending your message again.");
+                if (isInterviewActive) {
+                    isWaitingForResponse = false;
+                    setInputState(false);
+                }
+            }
+        }
+
+        async function handleSend() {
+            if (!isInterviewActive || isWaitingForResponse) return;
+
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Reset input UI
+            userInput.value = '';
+            userInput.style.height = '44px';
+            
+            // Update UI & History
+            addMessageToUI(text, true);
+            chatHistory.push({
+                role: "user",
+                parts: [{ text: text }]
+            });
+
+            isWaitingForResponse = true;
+            setInputState(true);
+            showTypingIndicator();
+
+            await fetchGeminiResponse();
+        }
+
+        async function endInterview() {
+            if (!isInterviewActive || isWaitingForResponse) return;
+
+            // Confirm ending
+            const confirmEnd = window.confirm("Are you sure you want to end the interview and generate your performance assessment?");
+            if (!confirmEnd) return;
+
+            isInterviewActive = false;
+            setInputState(true);
+            endBtn.classList.add('hidden');
+            document.getElementById('inputArea').classList.add('hidden');
+
+            const assessmentPrompt = "[SYSTEM COMMAND: ASSESS] The interview is now concluded. Please evaluate my performance as a candidate for the Assistant Property Manager position at 1010 Waugh. Provide detailed feedback on my communication style, problem-solving skills, engagement, and readiness for the role based strictly on our conversation. Use bullet points for readability.";
+
+            chatHistory.push({
+                role: "user",
+                parts: [{ text: assessmentPrompt }]
+            });
+
+            // UI feedback to show assessment is generating
+            const divider = document.createElement('div');
+            divider.className = "flex items-center justify-center my-6 space-x-4";
+            divider.innerHTML = `
+                <hr class="flex-1 border-gray-300">
+                <span class="text-xs font-semibold text-gray-500 uppercase tracking-widest">Interview Concluded - Generating Assessment</span>
+                <hr class="flex-1 border-gray-300">
+            `;
+            chatContainer.appendChild(divider);
+            scrollToBottom();
+            
+            showTypingIndicator();
+
+            await fetchGeminiResponse();
+        }
+
+        // Handle Enter key (Shift+Enter for new line)
+        userInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // Initialize chat automatically on load
+        window.onload = async function() {
+            isWaitingForResponse = true;
+            setInputState(true);
+            showTypingIndicator();
+
+            // Hidden first prompt to trigger the AI's opening statement
+            chatHistory.push({
+                role: "user",
+                parts: [{ text: "[SYSTEM COMMAND: START] I have arrived for the interview." }]
+            });
+
+            await fetchGeminiResponse();
+        };
+
+    </script>
+</body>
+</html>
+```
